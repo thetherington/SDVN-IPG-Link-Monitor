@@ -185,22 +185,32 @@ class edge_collector(magnum_cache):
 
         try:
 
-            payload = {
-                "jsonrpc": "2.0",
-                "method": "get",
-                "params": {"parameters": parameters},
-                "id": 1,
-            }
+            with requests.Session() as session:
 
-            url = "http://%s/cgi-bin/cfgjsonrpc" % (router)
+                ## get the session ID from accessing the login.php site
+                resp = session.get("http://%s/login.php" % router, verify=False, timeout=30.0,)
 
-            headers = {"content_type": "application/json"}
+                sessionID = resp.headers["Set-Cookie"].split(";")[0]
 
-            response = requests.post(
-                url, headers=headers, data=json.dumps(payload), verify=False, timeout=30.0,
-            )
+                payload = {
+                    "jsonrpc": "2.0",
+                    "method": "get",
+                    "params": {"parameters": parameters},
+                    "id": 1,
+                }
 
-            return json.loads(response.text)
+                url = "http://%s/cgi-bin/cfgjsonrpc" % (router)
+
+                headers = {
+                    "content_type": "application/json",
+                    "Cookie": sessionID + "; webeasy-loggedin=true",
+                }
+
+                response = session.post(
+                    url, headers=headers, data=json.dumps(payload), verify=False, timeout=30.0,
+                )
+
+                return json.loads(response.text)
 
         except Exception as e:
 
