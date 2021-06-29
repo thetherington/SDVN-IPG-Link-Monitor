@@ -98,15 +98,11 @@ class magnum_cache:
                                 # update the port_list_db with the port number as the object. create the
                                 # router object if it doesn't already exist
                                 if sfp["link"]["device"] in port_list_db.keys():
-                                    port_list_db[sfp["link"]["device"]].update(
-                                        {sfp["link"]["port"]: edge}
-                                    )
+                                    port_list_db[sfp["link"]["device"]].update({sfp["link"]["port"]: edge})
 
                                 else:
                                     port_list_db.update({sfp["link"]["device"]: {}})
-                                    port_list_db[sfp["link"]["device"]].update(
-                                        {sfp["link"]["port"]: edge}
-                                    )
+                                    port_list_db[sfp["link"]["device"]].update({sfp["link"]["port"]: edge})
 
                                 linked = True
 
@@ -135,14 +131,7 @@ class magnum_cache:
         except Exception as e:
 
             with open("edge_ports", "a+") as f:
-                f.write(
-                    str(datetime.datetime.now())
-                    + " --- "
-                    + "magnum_cache_builder"
-                    + "\t"
-                    + str(e)
-                    + "\r\n"
-                )
+                f.write(str(datetime.datetime.now()) + " --- " + "magnum_cache_builder" + "\t" + str(e) + "\r\n")
 
             return None
 
@@ -173,9 +162,7 @@ class magnum_cache:
             if ("ipg_matches" in key) and value:
                 self.ipg_matches.extend(value)
 
-        self.cache_url = "http://{}/proxy/insite/{}/api/-/model/magnum/{}".format(
-            self.insite, self.nature, self.cluster_ip
-        )
+        self.cache_url = "http://{}/proxy/insite/{}/api/-/model/magnum/{}".format(self.insite, self.nature, self.cluster_ip)
 
         self.catalog_cache()
 
@@ -188,7 +175,11 @@ class edge_collector(magnum_cache):
             with requests.Session() as session:
 
                 ## get the session ID from accessing the login.php site
-                resp = session.get("http://%s/login.php" % router, verify=False, timeout=30.0,)
+                resp = session.get(
+                    "http://%s/login.php" % router,
+                    verify=False,
+                    timeout=30.0,
+                )
 
                 sessionID = resp.headers["Set-Cookie"].split(";")[0]
 
@@ -207,7 +198,11 @@ class edge_collector(magnum_cache):
                 }
 
                 response = session.post(
-                    url, headers=headers, data=json.dumps(payload), verify=False, timeout=30.0,
+                    url,
+                    headers=headers,
+                    data=json.dumps(payload),
+                    verify=False,
+                    timeout=30.0,
                 )
 
                 return json.loads(response.text)
@@ -215,14 +210,7 @@ class edge_collector(magnum_cache):
         except Exception as e:
 
             with open("edge_ports", "a+") as f:
-                f.write(
-                    str(datetime.datetime.now())
-                    + " --- "
-                    + "router_api_fetch"
-                    + "\t"
-                    + str(e)
-                    + "\r\n"
-                )
+                f.write(str(datetime.datetime.now()) + " --- " + "router_api_fetch" + "\t" + str(e) + "\r\n")
 
             return None
 
@@ -319,14 +307,10 @@ class edge_collector(magnum_cache):
                                         param["value"] = item["convert"][param["value"]]
 
                                     # convert name from say RX Rate Allocated --> l_X_RX_Rate_Allocated
-                                    param["name"] = (
-                                        item["type"] + prefix_key + param["name"].replace(" ", "_")
-                                    )
+                                    param["name"] = item["type"] + prefix_key + param["name"].replace(" ", "_")
 
                             # add parameter to link object
-                            catalog[name]["links"][base_port].update(
-                                {param["name"]: param["value"]}
-                            )
+                            catalog[name]["links"][base_port].update({param["name"]: param["value"]})
 
     @property
     def collect(self):
@@ -360,7 +344,14 @@ class edge_collector(magnum_cache):
         self.catalog_results = {}
 
         threads = [
-            Thread(target=self.thread_process, args=(router, parts, self.catalog_results,))
+            Thread(
+                target=self.thread_process,
+                args=(
+                    router,
+                    parts,
+                    self.catalog_results,
+                ),
+            )
             for router, parts in self.router_db.items()
         ]
 
@@ -502,11 +493,31 @@ class edge_collector(magnum_cache):
     def __init__(self, **kwargs):
 
         self.exe_parameters = {
-            "rx_allocated": {"id": "241.[port]@i", "type": "integer", "name": "RX Rate Allocated",},
-            "rx_measured": {"id": "932.[port]@i", "type": "integer", "name": "RX Rate Measured",},
-            "tx_allocated": {"id": "242.[port]@i", "type": "integer", "name": "TX Rate Allocated",},
-            "tx_measured": {"id": "933.[port]@i", "type": "integer", "name": "TX Rate Measured",},
-            "port_status": {"id": "921.[port]@i", "type": "integer", "name": "Operation Status",},
+            "rx_allocated": {
+                "id": "241.[port]@i",
+                "type": "integer",
+                "name": "RX Rate Allocated",
+            },
+            "rx_measured": {
+                "id": "932.[port]@i",
+                "type": "integer",
+                "name": "RX Rate Measured",
+            },
+            "tx_allocated": {
+                "id": "242.[port]@i",
+                "type": "integer",
+                "name": "TX Rate Allocated",
+            },
+            "tx_measured": {
+                "id": "933.[port]@i",
+                "type": "integer",
+                "name": "TX Rate Measured",
+            },
+            "port_status": {
+                "id": "921.[port]@i",
+                "type": "integer",
+                "name": "Operation Status",
+            },
             "port_speed": {"id": "920.[port]@i", "type": "integer", "name": "Speed"},
         }
 
@@ -560,7 +571,7 @@ def main():
         "annotate": {"module": "ThirtyRock_PROD_edge_def", "dict": "return_reverselookup"},
         # "annotate_db": return_reverselookup(),
         "magnum_cache": {
-            "insite": "172.16.205.201",
+            "insite": "172.16.205.77",
             "nature": "mag-1",
             "cluster_ip": "100.103.224.21",
             "ipg_matches": ["570IPG-X19-25G"],
