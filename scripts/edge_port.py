@@ -25,7 +25,7 @@ class magnum_cache:
             # temp dict to organize the catalog
             port_list_db = {}
 
-            for device in cache["magnum"]["magnum-controlled-devices"]:
+            for device in cache["magnum-controlled-devices"]:
 
                 if device["device"] == "EXE":
 
@@ -124,7 +124,21 @@ class magnum_cache:
 
         try:
 
-            response = requests.get(self.cache_url, verify=False, timeout=30.0)
+            # Get OT Bearer Token
+            login = {"username": "admin", "password": "admin"}
+
+            response = requests.post(
+                "https://%s/api/v1/login" % self.insite,
+                headers={"Content-Type": "application/json"},
+                data=json.dumps(login),
+                verify=False,
+                timeout=30.0,
+            ).json()
+
+            otbt = {"otbt-is": response["otbt-is"]}
+
+            # Get magnum config
+            response = requests.get(self.cache_url, params=otbt, verify=False, timeout=30.0)
 
             return json.loads(response.text)
 
