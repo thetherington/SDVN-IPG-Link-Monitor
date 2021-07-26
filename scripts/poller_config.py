@@ -1,5 +1,5 @@
 import json
-from edge_port import edge_collector
+from edge_port import EdgeCollector
 from insite_plugin import InsitePlugin
 
 
@@ -18,7 +18,7 @@ class Plugin(InsitePlugin):
             from ThirtyRock_PROD_edge_def import return_reverselookup
 
             params = {
-                "router_prefix": "router[-1:]",
+                "dual_hot": True,
                 "annotate_db": return_reverselookup(),
                 "magnum_cache": {
                     "insite": "100.103.224.9",
@@ -28,6 +28,6 @@ class Plugin(InsitePlugin):
                 },
             }
 
-            self.collector = edge_collector(**params)
+            self.collector = EdgeCollector(**params)
 
         return json.dumps(self.collector.collect)

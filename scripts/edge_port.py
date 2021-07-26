@@ -1,126 +1,43 @@
 import copy
 import datetime
 import json
+from itertools import zip_longest
+from pathlib import Path
 from threading import Thread
 
 import requests
 import urllib3
 
-
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 requests.packages.urllib3.disable_warnings()
 
 
-class magnum_cache:
-    def catalog_cache(self):
+class MagnumCache:
+    def __init__(self, **kwargs):
 
-        cache = self.cache_fetch()
+        self.insite = "127.0.0.1"
+        self.nature = "mag-1"
+        self.cluster_ip = None
+        self.port_remap = None
+        self.ipg_matches = []
+        self.router_db = {}
+        self.ipg_db = []
+        self.no_port_list = None
+        self.routers_match = ["EXE", "IPX"]
 
-        if cache:
+        for key, value in kwargs.items():
 
-            # main database initilized as empty dictionary and no port list initilized
-            self.router_db = {}
-            self.no_port_list = []
+            if ("ipg_matches" in key) and value:
+                self.ipg_matches.extend(value)
 
-            # temp dict to organize the catalog
-            port_list_db = {}
+            else:
+                setattr(self, key, value)
 
-            for device in cache["magnum-controlled-devices"]:
+        self.cache_url = "http://{}/proxy/insite/{}/api/-/model/magnum/{}".format(self.insite, self.nature, self.cluster_ip)
 
-                if device["device"] == "EXE":
+        self.catalog_cache()
 
-                    router = {
-                        device["device-name"]: {
-                            "device_name": device["device-name"],
-                            "device": device["device"],
-                            "device_size": device["device-size"],
-                            "device_type": device["device-type"],
-                            "control_1_address": device["control-1-address"]["host"],
-                            "control_2_address": device["control-2-address"]["host"],
-                            "ports_db": {},
-                            "params": [],
-                        }
-                    }
-
-                    self.router_db.update(router)
-
-                # future use if edges are connected to IPX cards
-                if device["device"] == "IPX":
-                    pass
-
-                # future key dicates if the device is virtually modeled in the config as a placeholder
-                if device["device"] in self.ipg_matches and "future" not in device.keys():
-
-                    edge_template = {
-                        "device_name": device["device-name"],
-                        "device": device["device"],
-                        "device_size": device["device-size"],
-                        "device_type": device["device-type"],
-                        "control_address": device["control-1-address"]["host"],
-                        "sfps": {},
-                    }
-
-                    # test if a link was found
-                    linked = None
-
-                    # collect the sfp linkage (if exists) and create the parameter string now
-                    # with the port information.
-                    if "sfps" in device.keys():
-                        for sfp_db in device["sfps"]:
-
-                            sfp = copy.deepcopy(sfp_db)
-
-                            # not every IPG SFP is linked to the router
-                            if "link" in sfp.keys():
-
-                                # add params list to the sfp dictionary
-                                sfp["params"] = []
-
-                                # iterate through each of the parames in the inherited parameter db update the fake [port] string
-                                # to the sfp port number (-minus 1 (0 based ports))
-                                for _, value in self.exe_parameters.items():
-
-                                    param = copy.deepcopy(value)
-
-                                    # zero base it and then replace the template marker '[port]'
-                                    port_num = sfp["link"]["port"] - 1
-                                    param["id"] = param["id"].replace("[port]", str(port_num))
-
-                                    sfp["params"].append(param)
-
-                                # convert Mb to bits
-                                sfp["link"]["capacity"] = sfp["link"]["capacity"] * 1000000
-
-                                # make copy of edge dictionary and add the sfp to the dict.
-                                edge = copy.deepcopy(edge_template)
-                                edge["sfps"].update(sfp)
-
-                                # update the port_list_db with the port number as the object. create the
-                                # router object if it doesn't already exist
-                                if sfp["link"]["device"] in port_list_db.keys():
-                                    port_list_db[sfp["link"]["device"]].update({sfp["link"]["port"]: edge})
-
-                                else:
-                                    port_list_db.update({sfp["link"]["device"]: {}})
-                                    port_list_db[sfp["link"]["device"]].update({sfp["link"]["port"]: edge})
-
-                                linked = True
-
-                    if not linked:
-                        # add to not linked list
-                        self.no_port_list.append(edge_template)
-
-            # merge the port_list_db with the router db. then merge all the port api parameters
-            # into a single list in the router db.
-            for router, ports in port_list_db.items():
-                if router in self.router_db.keys():
-
-                    self.router_db[router]["ports_db"].update(ports)
-
-                    for _, port in ports.items():
-                        self.router_db[router]["params"].extend(port["sfps"]["params"])
-
-    def cache_fetch(self):
+    def config_fetch(self):
 
         try:
 
@@ -149,40 +66,214 @@ class magnum_cache:
 
             return None
 
+    def catalog_cache(self):
+
+        config = self.config_fetch()
+
+        if config:
+
+            for device in config["magnum-controlled-devices"]:
+
+                # inventory routers that are either IPX or EXE
+                if device["device"] in self.routers_match:
+
+                    router = {
+                        device["device-name"]: {
+                            "device_name": device["device-name"],
+                            "device": device["device"],
+                            "device_size": device["device-size"],
+                            "device_type": device["device-type"],
+                            "control_1_address": device["control-1-address"]["host"],
+                            "control_2_address": device["control-2-address"]["host"],
+                            "ports_db": {},
+                            "params": [],
+                        }
+                    }
+
+                    self.router_db.update(router)
+
+                if device["device"] in self.ipg_matches and "future" not in device.keys():
+
+                    edge_template = {
+                        "s_device_name": device["device-name"],
+                        "s_device": device["device"],
+                        "s_device_size": device["device-size"],
+                        "s_device_type": device["device-type"],
+                        "s_control_address": device["control-1-address"]["host"],
+                        "connections": {},
+                    }
+
+                    edge_template.update({"s_main": None, "s_backup": None} if self.dual_hot else {"as_router": []})
+
+                    try:
+
+                        if device["device"] == "3067VIP10G-3G" and self.dual_hot:
+
+                            sfp_tree = {}
+
+                            for sfp in device["sfps"]:
+                                if "link" in sfp.keys():
+
+                                    port = sfp["number"][:-1]
+
+                                    if port not in sfp_tree:
+                                        sfp_tree.update({port: [sfp]})
+
+                                    else:
+                                        sfp_tree[port].append(sfp)
+
+                            groups = [parts for _, parts in sfp_tree.items()]
+
+                        else:
+
+                            # create group of sets() of links either in pairs or in singles - depending if this is a dual hot system
+                            # there has to be a link object or it won't be grouped. *big assumption that if dual hot connections are consecutive*
+                            # example: ({sfp},{sfp}),({sfp},{sfp}) OR ({sfp}),({sfp})
+                            groups = zip_longest(
+                                *[iter([sfp for sfp in device["sfps"] if "link" in sfp.keys()])] * (2 if self.dual_hot else 1)
+                            )
+
+                        # create a link number by iteration through each set (either pair of sfps or singles)
+                        for link_num, link_parts in enumerate(groups, 1):
+
+                            link_def = {link_num: []}
+
+                            # iterate a pair of objects with a pair of labels if dual hot is enabled
+                            # otherwise use the router label with a single object per set
+                            for link, label in zip(link_parts, (["main", "backup"] if self.dual_hot else ["router"])):
+
+                                link_def[link_num].append(
+                                    {
+                                        "port": link["link"]["port"],
+                                        "device": link["link"]["device"],
+                                        "capacity": link["link"]["capacity"] * 1000000,
+                                        "type": label,
+                                    }
+                                )
+
+                                if self.dual_hot:
+                                    edge_template["s_" + label] = link["link"]["device"]
+
+                                else:
+
+                                    edge_template["as_" + label].append(link["link"]["device"])
+                                    edge_template["as_" + label] = list(set(edge_template["as_" + label]))
+
+                            edge_template["connections"].update(link_def)
+
+                    except Exception as e:
+                        print(e)
+
+                    self.ipg_db.append(edge_template)
+
+            def create_parameters(port):
+
+                num = port["port"]
+                label = port["type"]
+                router = port["device"]
+
+                try:
+
+                    for _, params in self.router_parameters.items():
+
+                        x = copy.deepcopy(params)
+
+                        x["id"] = x["id"].replace("<replace>", str(num - 1))
+                        x["name"] = x["name"] + ("_" + label if label is not "router" else "")
+
+                        self.router_db[router]["params"].append(x)
+
+                except Exception as e:
+                    print(e)
+
+            # iterate through each edge device collected from the magnumm config
+            for ipg in self.ipg_db:
+
+                # iterate through each link definition in the connections tree of the ipg
+                for _, group in ipg["connections"].items():
+
+                    # map the create_parameters the groups from each link list() to activate map()
+                    list(map(create_parameters, group))
+
+
+class EdgeCollector(MagnumCache):
     def __init__(self, **kwargs):
 
-        self.insite = None
-        self.nature = "mag-1"
-        self.cluster_ip = None
-        self.port_remap = None
-        self.ipg_matches = []
-        self.router_db = None
-        self.no_port_list = None
+        self.dual_hot = None
+        self.annotate = None
+
+        self.fetch = self.fetch_api
+
+        self.router_parameters = {
+            "rx_allocated": {
+                "id": "241.<replace>@i",
+                "type": "integer",
+                "name": "l_rx_rate_allocated",
+            },
+            "rx_measured": {
+                "id": "932.<replace>@i",
+                "type": "integer",
+                "name": "l_rx_rate_measured",
+            },
+            "tx_allocated": {
+                "id": "242.<replace>@i",
+                "type": "integer",
+                "name": "l_tx_rate_allocated",
+            },
+            "tx_measured": {
+                "id": "933.<replace>@i",
+                "type": "integer",
+                "name": "l_tx_rate_measured",
+            },
+            "port_status": {
+                "id": "921.<replace>@i",
+                "type": "integer",
+                "name": "s_operation_status",
+            },
+            "port_speed": {"id": "920.<replace>@i", "type": "integer", "name": "l_speed"},
+        }
+
+        self.router_parameter_control = {
+            "rate_allocated": {"multiplier": 1000},
+            "rate_measured": {"multiplier": 1000},
+            "operation_status": {"convert": {0: "UP", 1: "DOWN"}},
+            "speed": {"multiplier": 1000000},
+        }
+
+        if "dual_hot" in kwargs.keys():
+            self.dual_hot = kwargs["dual_hot"]
 
         for key, value in kwargs.items():
 
-            if ("insite" in key) and value:
-                self.insite = value
+            if "magnum_cache" in key:
+                MagnumCache.__init__(self, **value)
 
-            if ("host" in key) and value:
-                self.host = value
+            elif "override" in key and value:
 
-            if ("nature" in key) and value:
-                self.nature = value
+                try:
 
-            if ("cluster_ip" in key) and value:
-                self.cluster_ip = value
+                    with open(str(Path(value)), "r") as reader:
+                        self.override_dict = json.loads(reader.read())
 
-            if ("ipg_matches" in key) and value:
-                self.ipg_matches.extend(value)
+                    self.fetch = self.fetch_override
 
-        self.cache_url = "http://{}/proxy/insite/{}/api/-/model/magnum/{}".format(self.insite, self.nature, self.cluster_ip)
+                except Exception as e:
+                    print(e)
+                    quit()
 
-        self.catalog_cache()
+            elif key == "annotate":
 
+                exec("from {} import {}".format(value["module"], value["dict"]), globals())
 
-class edge_collector(magnum_cache):
-    def fetch_api(self, router, parameters):
+                self.annotate = eval(value["dict"] + "()")
+
+            elif key == "annotate_db":
+                self.annotate = value
+
+            else:
+                setattr(self, key, value)
+
+    def fetch_api(self, router):
 
         try:
 
@@ -190,25 +281,25 @@ class edge_collector(magnum_cache):
 
                 ## get the session ID from accessing the login.php site
                 resp = session.get(
-                    "http://%s/login.php" % router,
+                    "http://%s/login.php" % router["control_1_address"],
                     verify=False,
                     timeout=30.0,
                 )
 
-                sessionID = resp.headers["Set-Cookie"].split(";")[0]
+                session_id = resp.headers["Set-Cookie"].split(";")[0]
 
                 payload = {
                     "jsonrpc": "2.0",
                     "method": "get",
-                    "params": {"parameters": parameters},
+                    "params": {"parameters": router["params"]},
                     "id": 1,
                 }
 
-                url = "http://%s/cgi-bin/cfgjsonrpc" % (router)
+                url = "http://%s/cgi-bin/cfgjsonrpc" % (router["control_1_address"])
 
                 headers = {
                     "content_type": "application/json",
-                    "Cookie": sessionID + "; webeasy-loggedin=true",
+                    "Cookie": session_id + "; webeasy-loggedin=true",
                 }
 
                 response = session.post(
@@ -228,145 +319,34 @@ class edge_collector(magnum_cache):
 
             return None
 
-    def thread_process(self, router, parts, catalog):
+    def fetch_override(self, router):
 
-        # need error handling....
-        response = self.fetch_api(parts["control_1_address"], parts["params"])
+        try:
+            return self.override_dict[router["device_name"]]
 
-        if isinstance(response, dict):
+        except Exception:
+            return None
 
-            try:
+    def snapshot_routers(self, router, store):
 
-                router_result = {router: response["result"]["parameters"]}
+        response = self.fetch_api(router)
 
-            except Exception:
-                router_result = {}
+        store.update({router["device_name"]: response})
 
-            # scan through every result in each router object and build a new dictionary
-            # with the ipg as each object and update the object if it already exists
-            for router, results in router_result.items():
+    def create_snapshot(self):
 
-                for param in results:
-
-                    # skip over if a parameter is flagged with error
-                    if "error" not in param.keys():
-
-                        # port instance of string: 241.269@i = 269(+1)
-                        base_port = int(param["id"].split("@")[0].split(".")[1]) + 1
-
-                        # check if the cache lookup has the port
-                        if base_port in self.router_db[router]["ports_db"].keys():
-
-                            # creates a prefix which is a subset of the router name string
-                            # which is then concatinated into field names.
-                            prefix_key = eval(self.router_prefix) + "_"
-
-                            # reference in the ipg dictionary by the port
-                            ipg = self.router_db[router]["ports_db"][base_port]
-
-                            name = ipg["device_name"]
-                            sfp = int(ipg["sfps"]["number"])
-
-                            sfp_key = "i_" + prefix_key + "IPG_SFP"
-                            exe_key = "i_" + prefix_key + "EXE_PORT"
-
-                            capacity = ipg["sfps"]["link"]["capacity"]
-                            capacity_key = "l_" + prefix_key + "CAPACITY"
-
-                            # check if the ipg name is in the result dictionary
-                            # if not, then create the object
-                            if name not in catalog.keys():
-
-                                catalog.update({name: {"links": {}}})
-
-                            # base_port is used to seperate multiple links an ipg has to one router.
-                            if base_port not in catalog[name]["links"].keys():
-
-                                catalog[name]["links"].update({base_port: {}})
-
-                                # create base information.
-                                # this may get updated twice for multiple links, but no biggie
-                                fields = {
-                                    "s_device_name": ipg["device_name"],
-                                    "s_device": ipg["device"],
-                                    "s_device_size": ipg["device_size"],
-                                    "s_device_type": ipg["device_type"],
-                                    "s_control_address": ipg["control_address"],
-                                }
-
-                                catalog[name].update(fields)
-
-                            # add the sfp number and the exe port numbers for links found in base_port object
-                            if sfp_key not in catalog[name]["links"][base_port].keys():
-                                catalog[name]["links"][base_port].update({sfp_key: sfp})
-
-                            if exe_key not in catalog[name]["links"][base_port].keys():
-                                catalog[name]["links"][base_port].update({exe_key: base_port})
-
-                            # add capacity information to link
-                            if capacity_key not in catalog[name]["links"][base_port].keys():
-                                catalog[name]["links"][base_port].update({capacity_key: capacity})
-
-                            # iterate through each of the control paramters
-                            for key, item in self.exe_parameter_control.items():
-
-                                # check if the key in control parameters is in the name of the parameter
-                                if key in param["name"]:
-
-                                    # perform change depending what the change is for parameter
-                                    if "multiplier" in item.keys():
-                                        param["value"] = param["value"] * item["multiplier"]
-
-                                    elif "convert" in item.keys():
-                                        param["value"] = item["convert"][param["value"]]
-
-                                    # convert name from say RX Rate Allocated --> l_X_RX_Rate_Allocated
-                                    param["name"] = item["type"] + prefix_key + param["name"].replace(" ", "_")
-
-                            # add parameter to link object
-                            catalog[name]["links"][base_port].update({param["name"]: param["value"]})
-
-    @property
-    def collect(self):
-
-        # test prints
-        override = {
-            "7N.EXE.002.PROD.X": "172.17.151.13",
-            "7N.EXE.026.PROD.Y": "172.17.151.15",
-        }
-
-        for router, parts in self.router_db.items():
-
-            if self.override:
-                parts["control_1_address"] = override[router]
-
-            if self.verbose:
-                print(
-                    router,
-                    len(parts["ports_db"].keys()),
-                    len(parts["params"]),
-                    parts["control_1_address"],
-                )
-
-        if self.verbose:
-            print("Not connected", len(self.no_port_list))
-
-        # documents list returned to poller program
-        documents = []
-
-        # shared dictionary for processing thread
-        self.catalog_results = {}
+        store = {}
 
         threads = [
             Thread(
-                target=self.thread_process,
+                target=self.snapshot_routers,
                 args=(
                     router,
-                    parts,
-                    self.catalog_results,
+                    store,
                 ),
             )
-            for router, parts in self.router_db.items()
+            for _, router in self.router_db.items()
+            if len(router["params"]) > 0
         ]
 
         for x in threads:
@@ -375,234 +355,216 @@ class edge_collector(magnum_cache):
         for y in threads:
             y.join()
 
-        counters = {
-            "i_portfailures": 0,
-            "i_oversubscriptions": 0,
-            "i_speedstatus": 0,
+        with open(self.cluster_ip, "w") as writer:
+            writer.write(json.dumps(store, indent=1))
+
+    def router_process(self, router):
+
+        # reset to the port db tree to nothing
+        router["ports_db"] = {}
+
+        response = self.fetch(router)
+
+        try:
+
+            for param in response["result"]["parameters"]:
+
+                try:
+
+                    # skip over if a parameter is flagged with error
+                    if "error" not in param.keys():
+
+                        # port instance of string: 241.269@i = 269(+1)
+                        base_port = int(param["id"].split("@")[0].split(".")[1]) + 1
+
+                        name = param["name"]
+                        value = param["value"]
+
+                        # convert values based on how conversions are defined in the parameter control
+                        for k, v in self.router_parameter_control.items():
+
+                            if k in name and "multiplier" in v.keys():
+                                value = value * v["multiplier"]
+
+                            elif k in name and "convert" in v.keys():
+                                value = v["convert"][value]
+
+                        # add parameter to a nested port object to the router definition.
+                        if base_port in router["ports_db"].keys():
+                            router["ports_db"][base_port].update({name: value})
+
+                        else:
+                            router["ports_db"].update({base_port: {name: value, "as_issues": []}})
+
+                except Exception as e:
+                    print(e)
+                    continue
+
+            # perform the status and over subscription calculation here to make it easy
+            for _, parts in router["ports_db"].items():
+
+                rx_rate_allocated = 0
+                rx_rate_measured = 0
+                tx_rate_allocated = 0
+                tx_rate_measured = 0
+
+                for k, v in parts.items():
+
+                    if "operation_status" in k and v == "DOWN":
+                        parts["as_issues"].append("port_status")
+
+                    elif "rx_rate_allocated" in k:
+                        rx_rate_allocated = v
+                    elif "rx_rate_measured" in k:
+                        rx_rate_measured = v
+                    elif "tx_rate_allocated" in k:
+                        tx_rate_allocated = v
+                    elif "tx_rate_measured" in k:
+                        tx_rate_measured = v
+
+                if rx_rate_allocated < rx_rate_measured:
+                    parts["as_issues"].append("rx_over")
+
+                if tx_rate_allocated < tx_rate_measured:
+                    parts["as_issues"].append("tx_over")
+
+        except Exception as e:
+            print(e)
+
+    @property
+    def collect(self):
+
+        threads = [
+            Thread(
+                target=self.router_process,
+                args=(router,),
+            )
+            for _, router in self.router_db.items()
+            if len(router["params"]) > 0
+        ]
+
+        for x in threads:
+            x.start()
+
+        for y in threads:
+            y.join()
+
+        documents = []
+
+        overall_counters = {
+            "i_port_status": 0,
+            "i_over_subscriptions": 0,
+            "i_port_configuration": 0,
             "s_type": "summary",
         }
 
-        # create analysis and comparison on everything
-        # then build the document list through the iterations.
-        for _, data in self.catalog_results.items():
+        for ipg in self.ipg_db:
 
-            links = data["links"]
+            for link, ports in ipg["connections"].items():
 
-            ## add a link number to each ipg link for aggregations##
-            # dict_keys - > list - > sorted
-            for index, key in enumerate(sorted(list(links.keys())), 1):
-                links[key]["i_LINK"] = index
+                # copy in the ipg dictionary template and remove the connections
+                ipg_def = copy.deepcopy(ipg)
+                ipg_def.pop("connections")
 
-            # begin checking each link and do the comparison/analysis
-            for key, link in links.items():
+                # place holder to merge issues together
+                issues = []
 
-                # init placeholders
-                compare_rates, compare_speed, link_faults = {}, {}, []
+                for port in ports:
 
-                for label, value in link.items():
+                    try:
 
-                    # perform link operation status verification
-                    if "Status" in label and value == "DOWN":
-                        link_faults.append("{}".format(label[2:]))
-                        counters["i_portfailures"] += 1
+                        router_port_parts = copy.deepcopy(self.router_db[port["device"]]["ports_db"][port["port"]])
 
-                    # store the measure and allocated parameters into an organized dictionary nested by the router
-                    if "TX" in label or "RX" in label:
+                        # extend the issue list and pop out the issue list from the definition.
+                        issues.extend(router_port_parts.pop("as_issues"))
 
-                        parts = label.split("_")
-                        if parts[1] not in compare_rates.keys():
-                            compare_rates.update(
-                                {
-                                    parts[1]: {
-                                        "TX": {"Measured": None, "Allocated": None},
-                                        "RX": {"Measured": None, "Allocated": None},
-                                    }
-                                }
-                            )
+                        # merge the port metrics into the ipg definition.
+                        ipg_def.update(router_port_parts)
 
-                        compare_rates[parts[1]][parts[2]][parts[4]] = value
+                        # add port number and capacity setting from the link to the definitons
+                        port_key = "i_port{}".format("_" + port["type"] if port["type"] is not "router" else "")
+                        capacity_key = "l_capacity{}".format("_" + port["type"] if port["type"] is not "router" else "")
 
-                    # store the capacity and speed into a organized dictionary nested by the router
-                    if "Speed" in label or "CAPACITY" in label:
+                        ipg_def.update(
+                            {
+                                port_key: port["port"],
+                                capacity_key: port["capacity"],
+                            }
+                        )
 
-                        parts = label.split("_")
-                        if parts[1] not in compare_speed.keys():
-                            compare_speed.update({parts[1]: {"Speed": None, "CAPACITY": None}})
+                        # do port speed and capacity compare here. create an alert if they don't match
+                        for k, v in router_port_parts.items():
+                            if "speed" in k:
+                                if v != port["capacity"]:
+                                    issues.append("portspeed_missmatch")
 
-                        compare_speed[parts[1]][parts[2]] = value
+                    except Exception as e:
+                        print(e)
+                        continue
 
-                # iterate through rates dictionary and perform compare in each nested [router][tx/rx] object
-                for router, collections in compare_rates.items():
-                    for direction, params in collections.items():
+                # finish off the ipg definition with issues data and type
+                ipg_def.update(
+                    {
+                        "i_link": link,
+                        "b_fault": True if issues else False,
+                        "i_num_issues": len(issues),
+                        "as_issues": list(set(issues)),
+                        "s_type": "port",
+                    }
+                )
 
-                        if params["Measured"] > params["Allocated"]:
-
-                            link_faults.append("{}_{}_Over".format(router, direction))
-                            counters["i_oversubscriptions"] += 1
-
-                # iterate through speed and capacity and compare if they are not the same
-                for router, params in compare_speed.items():
-                    if params["Speed"] != params["CAPACITY"]:
-
-                        link_faults.append("{}_portSpeed_missmatch".format(router))
-                        counters["i_speedstatus"] += 1
-
-                # complete the fault flag creation
-                if len(link_faults) > 0:
-
-                    link["b_FAULT"] = True
-                    link["s_FAULT_LIST"] = ", ".join(link_faults)
-                    link["as_FAULT_LIST"] = link_faults
-
-                else:
-                    link["b_FAULT"] = False
-
-                ##### building the insite poller document list #####
-                ####################################################
-
-                fields = {}
-
-                # load in the link items
-                for label, value in link.items():
-                    fields.update({label: value})
-
-                # load in top level items
-                for label, value in data.items():
-                    if label != "links":
-                        fields.update({label: value})
-
-                # annotate the document if annotation is active
+                # annotate the ipg def is room annotations is enabled
                 if self.annotate:
 
-                    if fields["s_device_name"] in self.annotate.keys():
-                        fields.update(self.annotate[fields["s_device_name"]])
+                    if ipg_def["s_device_name"] in self.annotate.keys():
+                        ipg_def.update(self.annotate[ipg_def["s_device_name"]])
 
-                fields.update({"s_type": "port"})
-
+                # merge the ipg def to the final document structure
                 document = {
-                    "fields": fields,
-                    "host": fields["s_control_address"],
+                    "fields": ipg_def,
+                    "host": ipg_def["s_control_address"],
                     "name": "linkmon",
                 }
 
                 documents.append(document)
 
-        ### create summary ##
-        document = {"fields": counters, "host": self.cluster_ip, "name": "linkmon"}
+                overall_counters["i_over_subscriptions"] += issues.count("rx_over")
+                overall_counters["i_over_subscriptions"] += issues.count("tx_over")
+                overall_counters["i_port_status"] += issues.count("port_status")
+                overall_counters["i_port_configuration"] += issues.count("portspeed_missmatch")
+
+        # finish the overall counters document
+        document = {
+            "fields": overall_counters,
+            "host": self.cluster_ip,
+            "name": "linkmon",
+        }
 
         documents.append(document)
 
-        if self.verbose:
-            # print(json.dumps(self.catalog_results))
-            print("ipgs:", len(self.catalog_results.keys()))
-            links = 0
-            for _, parts in self.catalog_results.items():
-                links = links + len(parts["links"])
-            print("links:", links)
-            print("document_list:", len(documents))
-            print(counters)
-
         return documents
-
-    def __init__(self, **kwargs):
-
-        self.exe_parameters = {
-            "rx_allocated": {
-                "id": "241.[port]@i",
-                "type": "integer",
-                "name": "RX Rate Allocated",
-            },
-            "rx_measured": {
-                "id": "932.[port]@i",
-                "type": "integer",
-                "name": "RX Rate Measured",
-            },
-            "tx_allocated": {
-                "id": "242.[port]@i",
-                "type": "integer",
-                "name": "TX Rate Allocated",
-            },
-            "tx_measured": {
-                "id": "933.[port]@i",
-                "type": "integer",
-                "name": "TX Rate Measured",
-            },
-            "port_status": {
-                "id": "921.[port]@i",
-                "type": "integer",
-                "name": "Operation Status",
-            },
-            "port_speed": {"id": "920.[port]@i", "type": "integer", "name": "Speed"},
-        }
-
-        self.exe_parameter_control = {
-            "Allocated": {"type": "l_", "multiplier": 1000},
-            "Measured": {"type": "l_", "multiplier": 1000},
-            "Status": {"type": "s_", "convert": {0: "UP", 1: "DOWN"}},
-            "Speed": {"type": "l_", "multiplier": 1000000},
-        }
-
-        if "magnum_cache" in kwargs.keys():
-            magnum_cache.__init__(self, **kwargs["magnum_cache"])
-
-        self.verbose = None
-        self.override = None
-        self.disconnected = None
-        self.catalog_results = {}
-        self.annotate = None
-
-        for key, value in kwargs.items():
-
-            if "verbose" in key and value:
-                self.verbose = True
-
-            if "override" in key and value:
-                self.override = True
-
-            if "disconnected" in key and value:
-                self.disconnected = True
-
-            if "router_prefix" in key and value:
-                self.router_prefix = value
-
-            if key == "annotate":
-
-                exec("from {} import {}".format(value["module"], value["dict"]), globals())
-
-                self.annotate = eval(value["dict"] + "()")
-
-            if "annotate_db" in key:
-                self.annotate = value
 
 
 def main():
 
     params = {
-        "override": True,
-        "verbose": True,
-        "disconnected": True,
-        "router_prefix": "router[-1:]",
+        "override": "_files/100.103.224.21",
+        "dual_hot": True,
         "annotate": {"module": "ThirtyRock_PROD_edge_def", "dict": "return_reverselookup"},
         # "annotate_db": return_reverselookup(),
         "magnum_cache": {
             "insite": "172.16.205.77",
             "nature": "mag-1",
             "cluster_ip": "100.103.224.21",
-            "ipg_matches": ["570IPG-X19-25G"],
+            "ipg_matches": ["570IPG-X19-25G", "SCORPION", "3067VIP10G-3G"],
         },
     }
 
-    collector = edge_collector(**params)
+    collector = EdgeCollector(**params)
 
-    print(json.dumps(collector.collect, indent=2))
-    # print(len(return_reverselookup().keys()))
-    # inputQuit = False
+    # collector.create_snapshot()
 
-    # while inputQuit is not "q":
-
-    #     print(json.dumps(collector.collect, indent=2))
-
-    #     inputQuit = input("\nType q to quit or just hit enter: ")
+    print(json.dumps(collector.collect, indent=1))
 
 
 if __name__ == "__main__":
