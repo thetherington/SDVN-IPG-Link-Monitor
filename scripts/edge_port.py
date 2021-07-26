@@ -548,12 +548,12 @@ class EdgeCollector(MagnumCache):
 def main():
 
     params = {
-        "override": "_files/100.103.224.21",
-        "dual_hot": True,
-        "annotate": {"module": "ThirtyRock_PROD_edge_def", "dict": "return_reverselookup"},
+        # "override": "_files/100.103.224.21",
+        # "dual_hot": True,
+        # "annotate": {"module": "ThirtyRock_PROD_edge_def", "dict": "return_reverselookup"},
         # "annotate_db": return_reverselookup(),
         "magnum_cache": {
-            "insite": "172.16.205.77",
+            "insite": "127.0.0.1",
             "nature": "mag-1",
             "cluster_ip": "100.103.224.21",
             "ipg_matches": ["570IPG-X19-25G", "SCORPION", "3067VIP10G-3G"],

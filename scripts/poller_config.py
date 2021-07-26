@@ -15,16 +15,16 @@ class Plugin(InsitePlugin):
 
         except Exception:
 
-            from ThirtyRock_PROD_edge_def import return_reverselookup
+            # from ThirtyRock_PROD_edge_def import return_reverselookup
 
             params = {
-                "dual_hot": True,
-                "annotate_db": return_reverselookup(),
+                # "dual_hot": True,
+                # "annotate_db": return_reverselookup(),
                 "magnum_cache": {
-                    "insite": "100.103.224.9",
+                    "insite": "127.0.0.1",
                     "nature": "mag-1",
-                    "cluster_ip": "100.103.224.21",
-                    "ipg_matches": ["570IPG-X19-25G"],
+                    "cluster_ip": hosts[-1],
+                    "ipg_matches": ["570IPG-X19-25G", "SCORPION", "3067VIP10G-3G"],
                 },
             }
 
