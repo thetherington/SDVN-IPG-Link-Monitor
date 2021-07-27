@@ -84,7 +84,9 @@ class MagnumCache:
                             "device_size": device["device-size"],
                             "device_type": device["device-type"],
                             "control_1_address": device["control-1-address"]["host"],
-                            "control_2_address": device["control-2-address"]["host"],
+                            "control_2_address": device["control-2-address"]["host"]
+                            if "control-2-address" in device.keys()
+                            else None,
                             "ports_db": {},
                             "params": [],
                         }
@@ -114,7 +116,7 @@ class MagnumCache:
                             for sfp in device["sfps"]:
                                 if "link" in sfp.keys():
 
-                                    port = sfp["number"][:-1]
+                                    port = int(sfp["number"][:-1])
 
                                     if port not in sfp_tree:
                                         sfp_tree.update({port: [sfp]})
@@ -122,7 +124,7 @@ class MagnumCache:
                                     else:
                                         sfp_tree[port].append(sfp)
 
-                            groups = [parts for _, parts in sfp_tree.items()]
+                            groups = [parts for _, parts in sorted(sfp_tree.items())]
 
                         else:
 
@@ -147,6 +149,7 @@ class MagnumCache:
                                         "port": link["link"]["port"],
                                         "device": link["link"]["device"],
                                         "capacity": link["link"]["capacity"] * 1000000,
+                                        "sfp": link["number"],
                                         "type": label,
                                     }
                                 )
@@ -481,16 +484,11 @@ class EdgeCollector(MagnumCache):
                         # merge the port metrics into the ipg definition.
                         ipg_def.update(router_port_parts)
 
-                        # add port number and capacity setting from the link to the definitons
-                        port_key = "i_port{}".format("_" + port["type"] if port["type"] is not "router" else "")
-                        capacity_key = "l_capacity{}".format("_" + port["type"] if port["type"] is not "router" else "")
+                        # add port number, capacity and sfp setting from the link to the definitons
+                        for x, y in zip(["port", "capacity", "sfp"], ["i", "l", "s"]):
 
-                        ipg_def.update(
-                            {
-                                port_key: port["port"],
-                                capacity_key: port["capacity"],
-                            }
-                        )
+                            key = "{}_{}{}".format(y, x, "_" + port["type"] if port["type"] is not "router" else "")
+                            ipg_def.update({key: port[x]})
 
                         # do port speed and capacity compare here. create an alert if they don't match
                         for k, v in router_port_parts.items():
