@@ -75,7 +75,7 @@
 
     div.toolstip .tooltiptext {
         visibility: hidden;
-        width: 120px;
+        width: 180px;
         background-color: #555;
         color: #fff;
         text-align: center;
@@ -113,16 +113,16 @@
         <tr>
             <th class="one">IPG</th>
             <th class="status">LINK</th>
-            <th class="status">X-STATUS</th>
-            <th class="status" style="border-right: 1px solid gray;">Y-STATUS</th>
-            <th class="one">X-RX Allocated</th>
-            <th class="one">X-RX Measured</th>
-            <th class="one">X-TX Allocated</th>
-            <th class="one" style="border-right: 1px solid gray;">X-TX Measured</th>
-            <th class="one">Y-RX Allocated</th>
-            <th class="one">Y-RX Measured</th>
-            <th class="one">Y-TX Allocated</th>
-            <th class="one">Y-TX Measured</th>
+            <th class="status">Main-Status</th>
+            <th class="status" style="border-right: 1px solid gray;">Backup-Status</th>
+            <th class="one">Main-RX Allocated</th>
+            <th class="one">Main-RX Measured</th>
+            <th class="one">Main-TX Allocated</th>
+            <th class="one" style="border-right: 1px solid gray;">Main-TX Measured</th>
+            <th class="one">Backup-RX Allocated</th>
+            <th class="one">Backup-RX Measured</th>
+            <th class="one">Backup-TX Allocated</th>
+            <th class="one">Backup-TX Measured</th>
         </tr>
     </thead>
     <tbody class="fixed_header">
@@ -134,11 +134,10 @@
                 <div class="toolstip">
                     {{value}}
                     <span class="tooltiptext">
+                        {{buckets.0.metrics.19.value}}<br>
                         {{buckets.0.metrics.20.value}}<br>
                         {{buckets.0.metrics.21.value}}<br>
-                        <a href="http://{{buckets.0.metrics.22.value}}" target="_blank">
-                            {{buckets.0.metrics.22.value}}</a><br>
-                        PCR: {{buckets.0.metrics.24.value}}
+
                     </span>
                 </div>
             </td>
@@ -158,10 +157,10 @@
                                         {{value}}
                                     </a>
                                     <span class="tooltiptext">
-                                        X-SFP: <b>{{metrics.3.value}}</b> |
-                                        X-EXE: <b>{{metrics.4.value}}</b><br>
-                                        Y-SFP: <b>{{metrics.5.value}}</b> |
-                                        Y-EXE: <b>{{metrics.6.value}}</b><br>
+                                        Main-SFP: <b>{{metrics.3.value}}</b> |
+                                        Main-RTR: <b>{{metrics.4.value}}</b><br>
+                                        Backup-SFP: <b>{{metrics.5.value}}</b> |
+                                        Backup-RTR: <b>{{metrics.6.value}}</b><br>
                                     </span>
                                 </div>
                             </td>
@@ -174,8 +173,9 @@
                                             {{/compare}}
                                             {{metrics.1.value}}
                                             <span class="tooltiptext">
-                                                EXE-Speed: {{metrics.8.value}}
-                                                Magnum: {{metrics.7.value}}
+                                                Speed: {{metrics.8.value}} <br>
+                                                Magnum: {{metrics.7.value}} <br>
+                                                {{metrics.23.value}}
                                             </span>
                                         </font>
                                 </div>
@@ -189,50 +189,51 @@
                                             {{/compare}}
                                             {{metrics.2.value}}
                                             <span class="tooltiptext">
-                                                EXE-Speed: {{metrics.10.value}}
-                                                Magnum: {{metrics.9.value}}
+                                                Speed: {{metrics.10.value}} <br>
+                                                Magnum: {{metrics.9.value}} <br>
+                                                {{metrics.24.value}}
                                             </span>
                                         </font>
                                 </div>
                             </td>
 
-                            <td class="one">{{metrics.12.value}}</td>
+                            <td class="one">{{metrics.11.value}}</td>
                             <td class="one">
                                 <font>
-                                    {{#compare metrics.13.raw ">" metrics.12.raw}}
+                                    {{#compare metrics.12.raw ">" metrics.11.raw}}
                                     <font class="DOWN">
                                         {{/compare}}
-                                        {{metrics.13.value}}</font>
+                                        {{metrics.12.value}}</font>
                             </td>
 
                             <td class="one">{{metrics.14.value}}</td>
 
                             <td class="one" style="border-right: 1px solid #222222;">
                                 <font>
-                                    {{#compare metrics.15.raw ">" metrics.14.raw}}
+                                    {{#compare metrics.14.raw ">" metrics.13.raw}}
                                     <font class="DOWN">
                                         {{/compare}}
-                                        {{metrics.15.value}}</font>
+                                        {{metrics.14.value}}</font>
                             </td>
 
-                            <td class="one">{{metrics.16.value}}</td>
+                            <td class="one">{{metrics.15.value}}</td>
 
                             <td class="one">
                                 <font>
-                                    {{#compare metrics.17.raw ">" metrics.16.raw}}
+                                    {{#compare metrics.16.raw ">" metrics.15.raw}}
                                     <font class="DOWN">
                                         {{/compare}}
-                                        {{metrics.17.value}}</font>
+                                        {{metrics.16.value}}</font>
                             </td>
 
-                            <td class="one">{{metrics.18.value}}</td>
+                            <td class="one">{{metrics.17.value}}</td>
 
                             <td class="one">
                                 <font>
-                                    {{#compare metrics.19.raw ">" metrics.18.raw}}
+                                    {{#compare metrics.18.raw ">" metrics.17.raw}}
                                     <font class="DOWN">
                                         {{/compare}}
-                                        {{metrics.19.value}}</font>
+                                        {{metrics.18.value}}</font>
                             </td>
 
                         </tr>

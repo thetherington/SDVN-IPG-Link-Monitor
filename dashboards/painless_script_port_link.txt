@@ -1,1 +1,0 @@
-return 'poller.ipg.linkmon.s_device_name:"' + doc['poller.ipg.linkmon.s_device_name'].value + '" poller.ipg.linkmon.i_link:' + doc['poller.ipg.linkmon.i_link'].value

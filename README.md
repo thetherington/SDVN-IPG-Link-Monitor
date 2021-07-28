@@ -13,7 +13,7 @@ Below are the module distinct abilities and features that it provides:
 
 ## Minimum Requirements:
 
-- inSITE Version 11.0
+- inSITE Version 11.0 or inSITE 10.3 Service Pack 13+
 - Python3.7 (_already installed on inSITE machine_)
 - Python3 Requests library (_already installed on inSITE machine_)
 
